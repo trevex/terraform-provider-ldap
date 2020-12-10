@@ -42,7 +42,7 @@ func New(version string) func() *schema.Provider {
 				},
 			},
 			ResourcesMap: map[string]*schema.Resource{
-				// "dns_record_set": resourceRecordSet(),
+				"ldap_object": resourceLDAPObject(),
 			},
 			DataSourcesMap:       map[string]*schema.Resource{},
 			ConfigureContextFunc: providerConfigure,
