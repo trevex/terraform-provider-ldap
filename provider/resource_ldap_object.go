@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-ldap/ldap/v3"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"golang.org/x/text/encoding/unicode"
 )
 
 func resourceLDAPObject() *schema.Resource {
@@ -133,7 +134,8 @@ func resourceLDAPObjectCreate(d *schema.ResourceData, meta interface{}) error {
 				// each map should only have one entry (see resource declaration)
 				for name, value := range attribute.(map[string]interface{}) {
 					log.Printf("[DEBUG] ldap_object::create - %q has attribute[%v] => %v (%T)", dn, name, value, value)
-					m[name] = append(m[name], value.(string))
+					v := toAttributeValue(name, value.(string))
+					m[name] = append(m[name], v)
 				}
 			}
 			// now loop through the map and add attributes with theys value(s)
@@ -373,7 +375,8 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set) error {
 			for _, m := range ns.List() {
 				for mk, mv := range m.(map[string]interface{}) {
 					if k == mk {
-						values = append(values, mv.(string))
+						v := toAttributeValue(k, mv.(string))
+						values = append(values, v)
 					}
 				}
 			}
@@ -394,7 +397,8 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set) error {
 		for _, m := range ns.List() {
 			for mk, mv := range m.(map[string]interface{}) {
 				if k == mk {
-					values = append(values, mv.(string))
+					v := toAttributeValue(k, mv.(string))
+					values = append(values, v)
 				}
 			}
 		}
@@ -402,4 +406,13 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set) error {
 		log.Printf("[DEBUG} ldap_object::deltas - changing attribute %q with values %v", k, values)
 	}
 	return nil
+}
+
+func toAttributeValue(name, value string) string {
+	if name == "unicodePwd" {
+		utf16 := unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
+		pwdEncoded, _ := utf16.NewEncoder().String("\"" + value + "\"")
+		return pwdEncoded
+	}
+	return value
 }
