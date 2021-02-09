@@ -1,10 +1,10 @@
 TEST?=$$(go list ./... | grep -v 'vendor')
-HOSTNAME=github.com
-NAMESPACE=trevex
-NAME=ldap
-BINARY=terraform-provider-${NAME}
-VERSION=0.2
-OS_ARCH=darwin_amd64
+HOSTNAME ?= github.com
+NAMESPACE ?= trevex
+NAME ?= ldap
+BINARY = terraform-provider-${NAME}
+VERSION ?= 0.2
+OS_ARCH ?= darwin_amd64
 
 default: install
 
