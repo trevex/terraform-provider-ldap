@@ -60,6 +60,20 @@ func resourceLDAPObject() *schema.Resource {
 				},
 				Optional: true,
 			},
+			"skip_attributes": {
+				Type:        schema.TypeSet,
+				Description: "A list of attributes which will not be tracked by the provider",
+				Elem:        &schema.Schema{Type: schema.TypeString},
+				Set:         schema.HashString,
+				Optional:    true,
+			},
+			"select_attributes": {
+				Type:        schema.TypeSet,
+				Description: "Only attributes in this list will be modified by the provider",
+				Elem:        &schema.Schema{Type: schema.TypeString},
+				Set:         schema.HashString,
+				Optional:    true,
+			},
 		},
 	}
 }
@@ -118,6 +132,20 @@ func resourceLDAPObjectCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 	request.Attribute("objectClass", objectClasses)
 
+	// retrieve attributes to skip from HCL
+	attributesToSkip := []string{"objectClass"}
+	for _, attr := range (d.Get("skip_attributes").(*schema.Set)).List() {
+		log.Printf("[DEBUG] ldap_object::create - object %q set to skip: %q", dn, attr.(string))
+		attributesToSkip = append(attributesToSkip, attr.(string))
+	}
+
+	// retrieve attributes to skip from HCL
+	attributesToSet := []string{}
+	for _, attr := range (d.Get("select_attributes").(*schema.Set)).List() {
+		log.Printf("[DEBUG] ldap_object::create - object %q set to only modify: %q", dn, attr.(string))
+		attributesToSet = append(attributesToSet, attr.(string))
+	}
+
 	// if there is a non empty list of attributes, loop though it and
 	// create a new map collecting attribute names and its value(s); we need to
 	// do this because we could not model the attributes as a map[string][]string
@@ -133,6 +161,13 @@ func resourceLDAPObjectCreate(d *schema.ResourceData, meta interface{}) error {
 				log.Printf("[DEBUG] ldap_object::create - %q has attribute of type %T", dn, attribute)
 				// each map should only have one entry (see resource declaration)
 				for name, value := range attribute.(map[string]interface{}) {
+					if stringSliceContains(attributesToSkip, name) {
+						continue
+					}
+					if len(attributesToSet) > 0 && !stringSliceContains(attributesToSet, name) {
+						log.Printf("[DEBUG] ldap_object::create - %q skipping unselected attribute", dn, name)
+						continue
+					}
 					log.Printf("[DEBUG] ldap_object::create - %q has attribute[%v] => %v (%T)", dn, name, value, value)
 					v := toAttributeValue(name, value.(string))
 					m[name] = append(m[name], v)
@@ -154,6 +189,15 @@ func resourceLDAPObjectCreate(d *schema.ResourceData, meta interface{}) error {
 
 	d.SetId(dn)
 	return resourceLDAPObjectRead(d, meta)
+}
+
+func stringSliceContains(haystack []string, needle string) bool {
+	for _, h := range haystack {
+		if needle == h {
+			return true
+		}
+	}
+	return false
 }
 
 func resourceLDAPObjectRead(d *schema.ResourceData, meta interface{}) error {
@@ -254,6 +298,20 @@ func readLDAPObject(d *schema.ResourceData, meta interface{}, updateState bool) 
 	d.SetId(dn)
 	d.Set("object_classes", sr.Entries[0].GetAttributeValues("objectClass"))
 
+	// retrieve attributes to skip from HCL
+	attributesToSkip := []string{"objectClass"}
+	for _, attr := range (d.Get("skip_attributes").(*schema.Set)).List() {
+		log.Printf("[DEBUG] ldap_object::create - object %q set to skip: %q", dn, attr.(string))
+		attributesToSkip = append(attributesToSkip, attr.(string))
+	}
+
+	// retrieve attributes to set from HCL
+	attributesToSet := []string{}
+	for _, attr := range (d.Get("select_attributes").(*schema.Set)).List() {
+		log.Printf("[DEBUG] ldap_object::create - object %q set to only modify: %q", dn, attr.(string))
+		attributesToSet = append(attributesToSet, attr.(string))
+	}
+
 	// now deal with attributes
 	set := &schema.Set{
 		F: attributeHash,
@@ -261,9 +319,13 @@ func readLDAPObject(d *schema.ResourceData, meta interface{}, updateState bool) 
 
 	for _, attribute := range sr.Entries[0].Attributes {
 		log.Printf("[DEBUG] ldap_object::read - treating attribute %q of %q (%d values: %v)", attribute.Name, dn, len(attribute.Values), attribute.Values)
-		if attribute.Name == "objectClass" {
+		if stringSliceContains(attributesToSkip, attribute.Name) {
 			// skip: we don't treat object classes as ordinary attributes
 			log.Printf("[DEBUG] ldap_object::read - skipping attribute %q of %q", attribute.Name, dn)
+			continue
+		}
+		if len(attributesToSet) > 0 && !stringSliceContains(attributesToSet, attribute.Name) {
+			log.Printf("[DEBUG] ldap_object::read - skipping unselected attribute %q of %q", attribute.Name, dn)
 			continue
 		}
 		if len(attribute.Values) == 1 {
