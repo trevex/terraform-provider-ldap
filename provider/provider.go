@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/go-ldap/ldap/v3"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -44,7 +46,9 @@ func New(version string) func() *schema.Provider {
 			ResourcesMap: map[string]*schema.Resource{
 				"ldap_object": resourceLDAPObject(),
 			},
-			DataSourcesMap:       map[string]*schema.Resource{},
+			DataSourcesMap: map[string]*schema.Resource{
+				"ldap_object": dataLDAPObject(),
+			},
 			ConfigureContextFunc: providerConfigure,
 		}
 
@@ -98,3 +102,16 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}
 
 	return l, diags
 }
+
+func leveledLog(level string) func(format string, v ...interface{}) {
+	prefix := fmt.Sprintf("[%s] ", strings.ToUpper(level))
+	return func(format string, v ...interface{}) {
+		log.Printf(prefix+format, v...)
+	}
+}
+
+var traceLog = leveledLog("trace")
+var debugLog = leveledLog("debug")
+var infoLog = leveledLog("info")
+var warnLog = leveledLog("warn")
+var errorLog = leveledLog("error")
