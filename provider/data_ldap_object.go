@@ -53,9 +53,6 @@ func depthHelpString() string {
 func dataLDAPObject() *schema.Resource {
 	return &schema.Resource{
 		Read: dataLDAPObjectRead,
-		// Importer: &schema.ResourceImporter{
-		// 	State: resourceLDAPObjectImport,
-		// },
 
 		Schema: map[string]*schema.Schema{
 			"base_dn": {
@@ -111,6 +108,20 @@ func dataLDAPObject() *schema.Resource {
 					Description: "A json-encoded array of strings",
 				},
 			},
+			"skip_attributes": {
+				Type:        schema.TypeSet,
+				Description: "A list of attributes which will not be tracked by the provider",
+				Elem:        &schema.Schema{Type: schema.TypeString},
+				Set:         schema.HashString,
+				Optional:    true,
+			},
+			"select_attributes": {
+				Type:        schema.TypeSet,
+				Description: "Only attributes in this list will be modified by the provider",
+				Elem:        &schema.Schema{Type: schema.TypeString},
+				Set:         schema.HashString,
+				Optional:    true,
+			},
 		},
 	}
 }
@@ -137,7 +148,7 @@ func searchLDAPObject(d *schema.ResourceData, meta interface{}) error {
 	}
 	searchFilter := fmt.Sprintf("(&%s)", strings.Join(searchFilters, ""))
 
-	debugLog("ldap_object::read - looking in %q for %q", baseDN, searchFilter)
+	debugLog("data.ldap_object::read - looking in %q for %q", baseDN, searchFilter)
 	// when searching by DN, you don't need t specify the base DN a search
 	// filter a "subtree" scope: just put the DN (i.e. the primary key) as the
 	// base DN with a "base object" scope, and the returned object will be the
@@ -158,11 +169,11 @@ func searchLDAPObject(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		if err, ok := err.(*ldap.Error); ok {
 			if err.ResultCode == 32 { // no such object
-				warnLog("ldap_object::read - object not found with filter: %s", searchFilter)
+				warnLog("data.ldap_object::read - object not found with filter: %s", searchFilter)
 				return fmt.Errorf("Object not found with filter: %s", searchFilter)
 			}
 		}
-		debugLog("ldap_object::read - search %q returned an error %v", searchFilter, err)
+		debugLog("data.ldap_object::read - search %q returned an error %v", searchFilter, err)
 		return err
 	}
 
@@ -193,7 +204,7 @@ func searchLDAPObject(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	traceLog("ldap_object::read - found %q : %+v", dn, foundObject)
+	traceLog("data.ldap_object::read - found %q : %+v", dn, foundObject)
 	d.Set("dn", dn)
 	d.SetId("-")
 
@@ -202,16 +213,34 @@ func searchLDAPObject(d *schema.ResourceData, meta interface{}) error {
 		F: attributeHash,
 	}
 
+	// retrieve attributes to skip from HCL
+	attributesToSkip := []string{}
+	for _, attr := range (d.Get("skip_attributes").(*schema.Set)).List() {
+		debugLog("data.ldap_object::create - object %q set to skip: %q", dn, attr.(string))
+		attributesToSkip = append(attributesToSkip, attr.(string))
+	}
+
+	// retrieve attributes to skip from HCL
+	attributesToSet := []string{}
+	for _, attr := range (d.Get("select_attributes").(*schema.Set)).List() {
+		debugLog("data.ldap_object::create - object %q set to only modify: %q", dn, attr.(string))
+		attributesToSet = append(attributesToSet, attr.(string))
+	}
+
 	jsonAttributes := make(map[string]string)
 
 	for _, attribute := range searchResult.Entries[0].Attributes {
-		debugLog("ldap_object::read - adding attribute %q to %q (%d values)", attribute.Name, dn, len(attribute.Values))
+		if shouldSkipAttribute(attribute.Name, attributesToSkip, attributesToSet) {
+			debugLog("data.ldap_object::read - skipping attribute %q for %q", attribute.Name, dn)
+			continue
+		}
+		debugLog("data.ldap_object::read - adding attribute %q to %q (%d values)", attribute.Name, dn, len(attribute.Values))
 		// now add each value as an individual entry into the object, because
 		// we do not handle name => []values, and we have a set of maps each
 		// holding a single entry name => value; multiple maps may share the
 		// same key.
 		for _, value := range attribute.Values {
-			traceLog("ldap_object::read - for %q, setting %q => %q", dn, attribute.Name, value)
+			traceLog("data.ldap_object::read - for %q, setting %q => %q", dn, attribute.Name, value)
 			set.Add(map[string]interface{}{
 				attribute.Name: value,
 			})
@@ -226,12 +255,12 @@ func searchLDAPObject(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	if err := d.Set("attributes", set); err != nil {
-		warnLog("ldap_object::read - error setting attributes for %q : %v", dn, err)
+		warnLog("data.ldap_object::read - error setting attributes for %q : %v", dn, err)
 		return err
 	}
 
 	if err := d.Set("attributes_json", jsonAttributes); err != nil {
-		warnLog("ldap_object::read - error setting attributes_json for %q : %v", dn, err)
+		warnLog("data.ldap_object::read - error setting attributes_json for %q : %v", dn, err)
 		return err
 	}
 

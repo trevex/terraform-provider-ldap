@@ -347,13 +347,8 @@ func readLDAPObject(d *schema.ResourceData, meta interface{}, updateState bool) 
 
 	for _, attribute := range sr.Entries[0].Attributes {
 		debugLog("ldap_object::read - treating attribute %q of %q (%d values: %v)", attribute.Name, dn, len(attribute.Values), attribute.Values)
-		if stringSliceContains(attributesToSkip, attribute.Name) {
-			// skip: we don't treat object classes as ordinary attributes
-			debugLog("ldap_object::read - skipping attribute %q of %q", attribute.Name, dn)
-			continue
-		}
-		if len(attributesToSet) > 0 && !stringSliceContains(attributesToSet, attribute.Name) {
-			debugLog("ldap_object::read - skipping unselected attribute %q of %q", attribute.Name, dn)
+		if shouldSkipAttribute(attribute.Name, attributesToSkip, attributesToSet) {
+			debugLog("ldap_object::read - skipping attribute %q for %q", attribute.Name, dn)
 			continue
 		}
 		if len(attribute.Values) == 1 {
@@ -386,6 +381,10 @@ func readLDAPObject(d *schema.ResourceData, meta interface{}, updateState bool) 
 
 // computes the hash of the map representing an attribute in the attributes set
 func attributeHash(v interface{}) int {
+	if v == nil {
+		traceLog("Got an attribute hash request for nil")
+		return 0
+	}
 	m := v.(map[string]interface{})
 	var buffer bytes.Buffer
 	buffer.WriteString("map {")
@@ -417,18 +416,17 @@ func printAttributes(prefix string, attributes interface{}) string {
 	return buffer.String()
 }
 
-func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attributesToSkip, attributesToSet []string) error {
-	shouldSkipAttribute := func(k string) bool {
-		if len(attributesToSet) > 0 && !stringSliceContains(attributesToSet, k) {
-			return true
-		}
-		if len(attributesToSkip) > 0 && stringSliceContains(attributesToSkip, k) {
-			return true
-		}
-		debugLog("Not going to skip attribute %q", k)
-		return false
+func shouldSkipAttribute(k string, attributesToSkip, attributesToSet []string) bool {
+	if len(attributesToSet) > 0 && !stringSliceContains(attributesToSet, k) {
+		return true
 	}
+	if len(attributesToSkip) > 0 && stringSliceContains(attributesToSkip, k) {
+		return true
+	}
+	return false
+}
 
+func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attributesToSkip, attributesToSet []string) error {
 	rk := util.NewSet() // names of removed attributes
 	for _, v := range os.Difference(ns).List() {
 		for k := range v.(map[string]interface{}) {
@@ -454,7 +452,7 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attribu
 
 	// loop over remove attributes' names
 	for _, k := range rk.List() {
-		if shouldSkipAttribute(k) {
+		if shouldSkipAttribute(k, attributesToSkip, attributesToSet) {
 			continue
 		}
 		if !ak.Contains(k) && !kk.Contains(k) {
@@ -470,7 +468,7 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attribu
 	}
 
 	for _, k := range ak.List() {
-		if shouldSkipAttribute(k) {
+		if shouldSkipAttribute(k, attributesToSkip, attributesToSet) {
 			continue
 		}
 		if !rk.Contains(k) && !kk.Contains(k) {
@@ -496,7 +494,7 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attribu
 
 	// now loop over changed attributes and
 	for _, k := range ck.List() {
-		if shouldSkipAttribute(k) {
+		if shouldSkipAttribute(k, attributesToSkip, attributesToSet) {
 			continue
 		}
 		// the attributes in this set have been changed, in that a new value has
