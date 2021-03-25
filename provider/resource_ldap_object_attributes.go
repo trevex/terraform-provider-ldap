@@ -157,21 +157,23 @@ func resourceLDAPObjectAttributesRead(d *schema.ResourceData, meta interface{}) 
 	// We are both interested in the attributes before and after changes, so
 	// depending on what is available, let's compute the union
 	var (
-		prevSet  *schema.Set
-		nextSet  *schema.Set
+		oldSet   *schema.Set
+		newSet   *schema.Set
 		unionSet *schema.Set
 	)
 	if d.HasChange("attributes") {
 		prev, next := d.GetChange("attributes")
-		prevSet = prev.(*schema.Set)
-		nextSet = next.(*schema.Set)
+		oldSet = prev.(*schema.Set)
+		newSet = next.(*schema.Set)
 	} else {
-		nextSet = d.Get("attributes").(*schema.Set)
+		newSet = d.Get("attributes").(*schema.Set)
 	}
-	if prevSet != nil {
-		unionSet = prevSet.Union(nextSet)
+	debugLog("ldap_object_attributes::read - newSet of %q => %v", dn, newSet.List())
+	if oldSet != nil {
+		debugLog("ldap_object_attributes::read - oldSet of %q => %v", dn, oldSet.List())
+		unionSet = oldSet.Union(newSet)
 	} else {
-		unionSet = nextSet
+		unionSet = newSet
 	}
 	debugLog("ldap_object_attributes::read - union of %q => %v", dn, unionSet.List())
 
