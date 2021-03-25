@@ -81,7 +81,7 @@ func resourceLDAPObject() *schema.Resource {
 
 func resourceLDAPObjectImport(ctx context.Context, d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 	dn := d.Id()
-	debugLog("Goign to import dn %q", dn)
+	debugLog("Going to import dn %q", dn)
 	d.Set("dn", dn)
 	err := resourceLDAPObjectRead(d, meta)
 	return []*schema.ResourceData{d}, errors.Wrap(err, "Reading ldap object")
@@ -91,7 +91,7 @@ func resourceLDAPObjectExists(d *schema.ResourceData, meta interface{}) (b bool,
 	l := meta.(*ldap.Conn)
 	dn := d.Get("dn").(string)
 
-	debugLog("[DEBUG] ldap_object::exists - checking if %q exists", dn)
+	debugLog("ldap_object::exists - checking if %q exists", dn)
 
 	// search by primary key (that is, set the DN as base DN and use a "base
 	// object" scope); no attributes are retrieved since we are onòy checking
