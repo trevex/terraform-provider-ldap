@@ -1,8 +1,12 @@
 package provider
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/go-ldap/ldap/v3"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/trevex/terraform-provider-ldap/util"
 )
 
 func resourceLDAPObjectAttributes() *schema.Resource {
@@ -130,6 +134,14 @@ func resourceLDAPObjectAttributesRead(d *schema.ResourceData, meta interface{}) 
 	}
 	for _, attribute := range sr.Entries[0].Attributes {
 		debugLog("ldap_object_attributes::read - adding attribute %q to %q (%d values)", attribute.Name, dn, len(attribute.Values))
+		if len(attribute.Values) == 1 {
+			// we don't treat the RDN as an ordinary attribute
+			a := fmt.Sprintf("%s=%s", attribute.Name, attribute.Values[0])
+			if strings.HasPrefix(dn, a) {
+				debugLog("ldap_object_attributes::read - skipping RDN %q of %q", a, dn)
+				continue
+			}
+		}
 		// now add each value as an individual entry into the object, because
 		// we do not handle name => []values, and we have a set of maps each
 		// holding a single entry name => value; multiple maps may share the
@@ -161,10 +173,12 @@ func resourceLDAPObjectAttributesRead(d *schema.ResourceData, meta interface{}) 
 	} else {
 		unionSet = nextSet
 	}
+	debugLog("ldap_object_attributes::read - union of %q => %v", dn, unionSet.List())
 
 	// Now that we both have union of relevant terraform states and ldap, let's
 	// get the intersection and set it.
-	set := unionSet.Intersection(unionSet)
+	set := unionSet.Intersection(ldapSet)
+	debugLog("ldap_object_attributes::read - intersection with ldap of %q => %v", dn, set.List())
 
 	// If the set is empty the attributes do not exist, yet.
 	if set.Len() == 0 {
@@ -195,7 +209,7 @@ func resourceLDAPObjectAttributesUpdate(d *schema.ResourceData, meta interface{}
 		debugLog("ldap_object_attributes::update - \n%s", printAttributes("old attributes map", o))
 		debugLog("ldap_object_attributes::update - \n%s", printAttributes("new attributes map", n))
 
-		err := computeAndAddDeltas(modify, o.(*schema.Set), n.(*schema.Set), []string{}, []string{})
+		err := computeAndAddAttributeDeltas(modify, o.(*schema.Set), n.(*schema.Set))
 		if err != nil {
 			return err
 		}
@@ -210,7 +224,7 @@ func resourceLDAPObjectAttributesUpdate(d *schema.ResourceData, meta interface{}
 	} else {
 		warnLog("ldap_object_attributes::update - didn't actually make changes to %q because there were no changes requested", dn)
 	}
-	return resourceLDAPObjectRead(d, meta)
+	return resourceLDAPObjectAttributesRead(d, meta)
 }
 
 func resourceLDAPObjectAttributesDelete(d *schema.ResourceData, meta interface{}) error {
@@ -221,9 +235,9 @@ func resourceLDAPObjectAttributesDelete(d *schema.ResourceData, meta interface{}
 
 	modify := ldap.NewModifyRequest(dn, []ldap.Control{})
 
-	err := computeAndAddDeltas(modify, d.Get("attributes").(*schema.Set), &schema.Set{
+	err := computeAndAddAttributeDeltas(modify, d.Get("attributes").(*schema.Set), &schema.Set{
 		F: attributeHash,
-	}, []string{}, []string{})
+	})
 	if err != nil {
 		return err
 	}
@@ -239,5 +253,53 @@ func resourceLDAPObjectAttributesDelete(d *schema.ResourceData, meta interface{}
 	}
 
 	debugLog("ldap_object::delete - %q removed", dn)
+	return nil
+}
+
+func computeAndAddAttributeDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set) error {
+	ra := os.Difference(ns) // removed attributes
+	rk := util.NewSet()     // names of removed attributes
+	for _, v := range ra.List() {
+		for k := range v.(map[string]interface{}) {
+			rk.Add(k)
+		}
+	}
+
+	aa := ns.Difference(os) // added attributes
+	ak := util.NewSet()     // names of added attributes
+	for _, v := range aa.List() {
+		for k := range v.(map[string]interface{}) {
+			ak.Add(k)
+		}
+	}
+	// loop over remove attributes' names
+	for _, k := range rk.List() {
+		values := []string{}
+		for _, m := range ra.List() {
+			for mk, mv := range m.(map[string]interface{}) {
+				if k == mk {
+					v := toAttributeValue(k, mv.(string))
+					values = append(values, v)
+				}
+			}
+		}
+		modify.Delete(k, values)
+		debugLog("ldap_object_attributes::deltas - removing attribute %q with values %v", k, values)
+	}
+
+	for _, k := range ak.List() {
+		values := []string{}
+		for _, m := range aa.List() {
+			for mk, mv := range m.(map[string]interface{}) {
+				if k == mk {
+					v := toAttributeValue(k, mv.(string))
+					values = append(values, v)
+				}
+			}
+		}
+		modify.Add(k, values)
+		debugLog("ldap_object_attributes::deltas - adding new attribute %q with values %v", k, values)
+	}
+
 	return nil
 }
