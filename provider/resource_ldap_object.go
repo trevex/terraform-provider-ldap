@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"hash/crc32"
-	"log"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -264,7 +263,7 @@ func resourceLDAPObjectUpdate(d *schema.ResourceData, meta interface{}) error {
 			return err
 		}
 	} else {
-		warnLog("ldap_boject::update - didn't actually make changes to %q because there were no changes requested", dn)
+		warnLog("ldap_object::update - didn't actually make changes to %q because there were no changes requested", dn)
 	}
 	return resourceLDAPObjectRead(d, meta)
 }
@@ -460,7 +459,7 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attribu
 			// been added back, and there is no further value under the same
 			// name among those that were untouched; this means that it has
 			// been dropped and must go among the RemovedAttributes
-			log.Printf("[DEBUG} ldap_object::deltas - dropping attribute %q", k)
+			debugLog("ldap_object::deltas - dropping attribute %q", k)
 			modify.Delete(k, []string{})
 		} else {
 			ck.Add(k)
@@ -486,7 +485,7 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attribu
 				}
 			}
 			modify.Add(k, values)
-			log.Printf("[DEBUG} ldap_object::deltas - adding new attribute %q with values %v", k, values)
+			debugLog("ldap_object::deltas - adding new attribute %q with values %v", k, values)
 		} else {
 			ck.Add(k)
 		}
@@ -511,7 +510,7 @@ func computeAndAddDeltas(modify *ldap.ModifyRequest, os, ns *schema.Set, attribu
 			}
 		}
 		modify.Replace(k, values)
-		log.Printf("[DEBUG} ldap_object::deltas - changing attribute %q with values %v", k, values)
+		debugLog("ldap_object::deltas - changing attribute %q with values %v", k, values)
 	}
 	return nil
 }

@@ -44,7 +44,8 @@ func New(version string) func() *schema.Provider {
 				},
 			},
 			ResourcesMap: map[string]*schema.Resource{
-				"ldap_object": resourceLDAPObject(),
+				"ldap_object":            resourceLDAPObject(),
+				"ldap_object_attributes": resourceLDAPObjectAttributes(),
 			},
 			DataSourcesMap: map[string]*schema.Resource{
 				"ldap_object": dataLDAPObject(),
