@@ -87,8 +87,7 @@ func resourceLDAPObjectAttributesCreate(d *schema.ResourceData, meta interface{}
 
 	debugLog("ldap_object_attributes::create - object %q updated with additional attributes", dn)
 
-	d.SetId(dn)
-	return nil
+	return resourceLDAPObjectAttributesRead(d, meta)
 }
 
 func resourceLDAPObjectAttributesRead(d *schema.ResourceData, meta interface{}) error {
@@ -153,6 +152,7 @@ func resourceLDAPObjectAttributesRead(d *schema.ResourceData, meta interface{}) 
 			})
 		}
 	}
+	debugLog("ldap_object_attributes::read - attributes from ldap of %q => %v", dn, ldapSet.List())
 
 	// We are both interested in the attributes before and after changes, so
 	// depending on what is available, let's compute the union
