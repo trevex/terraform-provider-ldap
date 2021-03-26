@@ -16,6 +16,8 @@ func resourceLDAPObjectAttributes() *schema.Resource {
 		Update: resourceLDAPObjectAttributesUpdate,
 		Delete: resourceLDAPObjectAttributesDelete,
 
+		Description: "The `ldap_object_attributes`-resource owns only specific attributes of an object. In case of multi-valued attributes the resource only owns the values defined by the resource and all pre-existing ones or ones added by other means are left in-tact.",
+
 		Schema: map[string]*schema.Schema{
 			"dn": {
 				Type:        schema.TypeString,
