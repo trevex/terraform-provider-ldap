@@ -1,6 +1,7 @@
 The source and binary forms of this project are licensed under the following
 licenses respectively as this project builds upon the great work of existing
-open-source software.
+open-source software, namely:
+https://github.com/Pryz/terraform-provider-ldap
 
 -------------------------------------------------------------------------------
 
@@ -30,7 +31,7 @@ SOFTWARE.
 
 MIT License
 
-Copyright (c) 2020 Niklas VOss
+Copyright (c) 2020 Niklas Voss
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
