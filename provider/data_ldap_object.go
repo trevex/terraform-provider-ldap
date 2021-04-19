@@ -189,12 +189,15 @@ func searchLDAPObject(d *schema.ResourceData, meta interface{}) error {
 
 	foundObject := searchResult.Entries[0]
 
-	var dn string
-	for _, key := range []string{"dn", "DN", "distinguished_name", "distinguishedName"} {
-		dn = foundObject.GetAttributeValue(key)
-		if dn != "" {
-			traceLog("Found Distinguished Name for object: %s = %q", key, dn)
-			break
+	dn := foundObject.DN
+	
+	if dn == "" {
+		for _, key := range []string{"dn", "DN", "distinguished_name", "distinguishedName"} {
+			dn = foundObject.GetAttributeValue(key)
+			if dn != "" {
+				traceLog("Found Distinguished Name for object: %s = %q", key, dn)
+				break
+			}
 		}
 	}
 
