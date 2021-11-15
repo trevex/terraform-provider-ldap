@@ -1,6 +1,6 @@
 module github.com/trevex/terraform-provider-ldap
 
-go 1.15
+go 1.16
 
 require (
 	github.com/go-ldap/ldap/v3 v3.2.4
